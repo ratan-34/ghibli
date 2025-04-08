@@ -2,12 +2,8 @@ services:
   - type: web
     name: ghibli-style-transfer
     env: python
-    buildCommand: |
-      pip install -r requirements.txt
-      mkdir -p model
-      # Either include a command to download your model if it's too large for the repo
-      # curl -o model/AnimeGANv2_Hayao.onnx https://your-storage-url/AnimeGANv2_Hayao.onnx
-    startCommand: gunicorn --config=gunicorn_config.py main:app
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --workers=1 --threads=2 --timeout=120 main:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.12
