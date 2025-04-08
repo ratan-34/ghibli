@@ -17,20 +17,27 @@ import onnxruntime
 app = Flask(__name__, template_folder='templates')
 CORS(app)
 
-# Config
-app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'webp'}
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
-app.config['MODEL_PATH'] = os.path.join('model', 'AnimeGANv2_Hayao.onnx')
+# Configuration
+app.config.update({
+    'ALLOWED_EXTENSIONS': {'png', 'jpg', 'jpeg', 'webp'},
+    'MAX_CONTENT_LENGTH': 16 * 1024 * 1024,
+    'MODEL_PATH': os.path.join('models', 'ghibli_style.onnx'),
+    'UPLOAD_FOLDER': os.path.join('static', 'uploads'),
+    'OUTPUT_FOLDER': os.path.join('static', 'outputs'),
+    # Bank account details
+    'BANK_DETAILS': {
+        'account_name': 'Your Name',
+        'account_number': '1234567890',
+        'bank_name': 'Your Bank Name',
+        'ifsc_code': 'ABCD0123456',
+        'upi_id': 'yourname@upi',
+        'qr_code_path': os.path.join('static', 'qr_code.png')
+    }
+})
 
-# Bank account details (replace with your actual details)
-app.config['BANK_DETAILS'] = {
-    'account_name': 'Your Name',
-    'account_number': '1234567890',
-    'bank_name': 'Your Bank Name',
-    'ifsc_code': 'ABCD0123456',
-    'upi_id': 'yourname@upi',
-    'qr_code_path': os.path.join('static', 'qr_code.png')  # Path to your UPI QR code image
-}
+# Create directories if they don't exist
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
 
 # Image paths (relative to main.py)
 IMAGE_FOLDER = os.path.join(os.path.dirname(__file__), 'image')
@@ -38,27 +45,45 @@ permanent_image = "profile2.jpg"
 additional_image = "profile1.jpg"
 
 # Load ONNX model
-try:
-    ort_session = onnxruntime.InferenceSession(
-        app.config['MODEL_PATH'],
-        providers=['CPUExecutionProvider']
-    )
-    print("Model loaded successfully.")
-except Exception as e:
-    print(f"Failed to load model: {e}")
-    ort_session = None
+def load_model():
+    try:
+        providers = ['CPUExecutionProvider']
+        if 'CUDAExecutionProvider' in onnxruntime.get_available_providers():
+            providers.insert(0, 'CUDAExecutionProvider')
+        
+        session = onnxruntime.InferenceSession(
+            app.config['MODEL_PATH'],
+            providers=providers
+        )
+        print("Ghibli style model loaded successfully")
+        return session
+    except Exception as e:
+        print(f"Error loading model: {str(e)}")
+        return None
+
+ort_session = load_model()
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
 def preprocess_image(image_path):
     try:
-        img = Image.open(image_path).convert("RGB").resize((512, 512))
+        img = Image.open(image_path).convert("RGB")
+        # Maintain aspect ratio while resizing
+        width, height = img.size
+        if width > height:
+            new_width = 512
+            new_height = int(height * (512 / width))
+        else:
+            new_height = 512
+            new_width = int(width * (512 / height))
+        
+        img = img.resize((new_width, new_height), Image.LANCZOS)
         img = np.array(img).astype(np.float32) / 255.0
         img = np.expand_dims(img, axis=0)
         return img
     except Exception as e:
-        print(f"Error in preprocessing: {e}")
+        print(f"Preprocessing error: {str(e)}")
         raise
 
 def postprocess_image(output):
@@ -67,54 +92,69 @@ def postprocess_image(output):
         if output.shape[0] == 3:
             output = np.transpose(output, (1, 2, 0))
         output = (output * 255).clip(0, 255).astype(np.uint8)
-        output_img = Image.fromarray(output)
-        output_img = ImageEnhance.Sharpness(output_img).enhance(2.0)
-        output_img = ImageEnhance.Contrast(output_img).enhance(1.5)
-        return np.array(output_img)
+        
+        # Apply Ghibli-style enhancements
+        img = Image.fromarray(output)
+        
+        # Enhance colors and contrast
+        enhancer = ImageEnhance.Color(img)
+        img = enhancer.enhance(1.2)
+        
+        enhancer = ImageEnhance.Contrast(img)
+        img = enhancer.enhance(1.1)
+        
+        enhancer = ImageEnhance.Sharpness(img)
+        img = enhancer.enhance(1.5)
+        
+        return np.array(img)
     except Exception as e:
-        print(f"Error in postprocessing: {e}")
+        print(f"Postprocessing error: {str(e)}")
         raise
 
-def apply_ghibli_style(input_path):
+def apply_ghibli_style(input_path, output_path=None):
     try:
         if ort_session is None:
             raise RuntimeError("Model not loaded")
-
+        
         input_img = preprocess_image(input_path)
         input_name = ort_session.get_inputs()[0].name
         output_name = ort_session.get_outputs()[0].name
+        
+        # Run inference
         output = ort_session.run([output_name], {input_name: input_img})[0]
-
+        
+        # Post-process
         result_img = postprocess_image(output)
-        _, buffer = cv2.imencode('.jpg', cv2.cvtColor(result_img, cv2.COLOR_RGB2BGR))
-        return base64.b64encode(buffer).decode('utf-8')
+        
+        # Save or return the result
+        if output_path:
+            cv2.imwrite(output_path, cv2.cvtColor(result_img, cv2.COLOR_RGB2BGR))
+            return output_path
+        else:
+            _, buffer = cv2.imencode('.jpg', cv2.cvtColor(result_img, cv2.COLOR_RGB2BGR))
+            return base64.b64encode(buffer).decode('utf-8')
     except Exception as e:
-        print(f"Error in style transfer: {e}")
+        print(f"Style transfer error: {str(e)}")
         return None
 
 def process_with_style_api(image_path, style):
     """Process image using the appropriate style model"""
     try:
-        # Map style names to their corresponding Python files
         style_map = {
             'ghibli1': 'main.py',
             'ghibli2': 'main1.py',
-            'ghibli3': 'main2.py',  # Howl's Moving Castle style
+            'ghibli3': 'main2.py',
             'ghibli4': 'main3.py',
             'ghibli5': 'main4.py'
         }
         
         script_name = style_map.get(style, 'main.py')
-        
-        # Create output path
         output_dir = tempfile.gettempdir()
         output_path = os.path.join(output_dir, f"output_{uuid.uuid4().hex}.jpg")
         
-        # Prepare the command - ensure Python executable is used correctly
         python_exec = sys.executable or 'python'
         command = f"{python_exec} {script_name} --input {image_path} --output {output_path}"
         
-        # Run the command
         process = subprocess.Popen(
             command,
             shell=True,
@@ -130,11 +170,9 @@ def process_with_style_api(image_path, style):
         if not os.path.exists(output_path):
             raise RuntimeError("Output file not created by script")
             
-        # Read and encode the result
         with open(output_path, 'rb') as f:
             result_b64 = base64.b64encode(f.read()).decode('utf-8')
         
-        # Clean up
         try:
             os.remove(output_path)
         except Exception as e:
@@ -156,11 +194,9 @@ def image_to_base64(image_path):
 
 @app.route('/')
 def index():
-    # Build absolute paths to images
     permanent_path = os.path.join(IMAGE_FOLDER, permanent_image)
     additional_path = os.path.join(IMAGE_FOLDER, additional_image)
 
-    # Convert images to base64
     permanent_b64 = image_to_base64(permanent_path)
     additional_b64 = image_to_base64(additional_path)
 
@@ -176,12 +212,9 @@ def index():
 def payment():
     plan = request.args.get('plan', 'creator')
     period = request.args.get('period', 'monthly')
-    
-    # Calculate amount based on plan and period
     amount = calculate_amount(plan, period)
-    currency = 'INR'  # Changed to INR for Indian payment methods
+    currency = 'INR'
     
-    # Convert QR code to base64
     qr_code_b64 = None
     if os.path.exists(app.config['BANK_DETAILS']['qr_code_path']):
         with open(app.config['BANK_DETAILS']['qr_code_path'], 'rb') as f:
@@ -202,19 +235,11 @@ def verify_payment():
     try:
         data = request.json
         payment_method = data.get('payment_method')
-        transaction_id = data.get('transaction_id')
+        transaction_id = data.get('transaction_id', f"TXN{uuid.uuid4().hex[:8].upper()}")
         amount = data.get('amount')
         plan = data.get('plan')
         period = data.get('period')
         
-        # In a real implementation, you would verify the payment with your bank
-        # For this example, we'll just simulate a successful verification
-        
-        # Generate a fake transaction ID if not provided
-        if not transaction_id:
-            transaction_id = f"TXN{uuid.uuid4().hex[:8].upper()}"
-        
-        # Format the amount with 2 decimal places
         formatted_amount = "{:.2f}".format(amount / 100)
         
         return jsonify({
@@ -231,16 +256,12 @@ def verify_payment():
 
 @app.route('/payment-success')
 def payment_success():
-    # Get parameters from the request
     plan = request.args.get('plan', 'creator')
     period = request.args.get('period', 'monthly')
     transaction_id = request.args.get('transaction_id', f"TXN{uuid.uuid4().hex[:8].upper()}")
     payment_method = request.args.get('payment_method', 'Bank Transfer')
     
-    # Calculate amount based on plan and period
     amount = calculate_amount(plan, period)
-    
-    # Format current date and time
     current_datetime = datetime.now().strftime("%B %d, %Y, %I:%M %p")
     
     return render_template(
@@ -266,26 +287,20 @@ def upload_file():
         return jsonify({'status': 'error', 'message': 'File type not allowed'}), 400
 
     try:
-        # Create a temporary file with proper cross-platform handling
         temp_dir = tempfile.gettempdir()
         temp_path = os.path.join(temp_dir, secure_filename(file.filename))
         file.save(temp_path)
 
-        # Get the selected style from form data
         selected_style = request.form.get('style', 'ghibli1')
         
-        # Process image based on selected style
         if selected_style == 'ghibli1':
             result_b64 = apply_ghibli_style(temp_path)
         else:
-            # For other styles, call the appropriate processing function
             result_b64 = process_with_style_api(temp_path, selected_style)
         
-        # Read the original file again for base64 encoding
         with open(temp_path, 'rb') as f:
             original_b64 = base64.b64encode(f.read()).decode('utf-8')
         
-        # Clean up
         try:
             os.remove(temp_path)
         except Exception as e:
@@ -304,7 +319,6 @@ def upload_file():
         print(f"Upload error: {str(e)}")
         return jsonify({'status': 'error', 'message': f'Error: {str(e)}'}), 500
 
-# Add these new routes to your Flask app
 @app.route('/upload-ghibli1', methods=['POST'])
 def upload_file_ghibli1():
     return process_with_style('main.py')
@@ -334,22 +348,16 @@ def process_with_style(script_name):
     if not allowed_file(file.filename):
         return jsonify({'status': 'error', 'message': 'File type not allowed'}), 400
     try:
-        # Save the uploaded file temporarily
         temp_dir = tempfile.gettempdir()
         temp_path = os.path.join(temp_dir, secure_filename(file.filename))
         file.save(temp_path)
         
-        # Generate output path
         output_path = os.path.join(temp_dir, "output.jpg")
-        
-        # Modify the script running process to handle encoding correctly
-        # Use the PYTHONIOENCODING environment variable to ensure proper Unicode handling
         env = os.environ.copy()
         env['PYTHONIOENCODING'] = 'utf-8'
         
         command = f"python {script_name} --input {temp_path}"
         
-        # Run the command with proper encoding settings
         process = subprocess.Popen(
             command,
             shell=True,
@@ -365,15 +373,12 @@ def process_with_style(script_name):
         if not os.path.exists(output_path):
             raise RuntimeError("Output file not created by script")
             
-        # Read and return the result
         with open(output_path, 'rb') as f:
             result_b64 = base64.b64encode(f.read()).decode('utf-8')
         
-        # Read the original file for base64 encoding
         with open(temp_path, 'rb') as f:
             original_b64 = base64.b64encode(f.read()).decode('utf-8')
         
-        # Clean up
         try:
             os.remove(temp_path)
             os.remove(output_path)
@@ -390,16 +395,15 @@ def process_with_style(script_name):
         return jsonify({'status': 'error', 'message': f'Error: {str(e)}'}), 500
 
 def calculate_amount(plan, period):
-    # Implement your pricing logic here
     if plan == 'starter':
-        return 900 if period == 'monthly' else 9000  # ₹9/month or ₹90/year
+        return 900 if period == 'monthly' else 9000
     elif plan == 'creator':
-        return 1900 if period == 'monthly' else 18000  # ₹19/month or ₹180/year
+        return 1900 if period == 'monthly' else 18000
     elif plan == 'professional':
-        return 4900 if period == 'monthly' else 47000  # ₹49/month or ₹470/year
+        return 4900 if period == 'monthly' else 47000
     return 0
 
 if __name__ == '__main__':
-    # Force UTF-8 encoding for the Flask app
     os.environ['PYTHONIOENCODING'] = 'utf-8'
-    app.run(debug=True, port=5000, threaded=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
