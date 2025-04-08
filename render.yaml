@@ -4,10 +4,11 @@ services:
     env: python
     buildCommand: |
       pip install -r requirements.txt
-      mkdir -p models
-      wget -O models/ghibli_style.onnx [YOUR_MODEL_URL]
-    startCommand: gunicorn --config gunicorn_config.py main:app
+      mkdir -p model
+      # Either include a command to download your model if it's too large for the repo
+      # curl -o model/AnimeGANv2_Hayao.onnx https://your-storage-url/AnimeGANv2_Hayao.onnx
+    startCommand: gunicorn --config=gunicorn_config.py main:app
     envVars:
-      - key: PYTHONUNBUFFERED
-        value: "1"
+      - key: PYTHON_VERSION
+        value: 3.9.12
     plan: free
