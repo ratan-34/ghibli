@@ -34,7 +34,7 @@ app.config['BANK_DETAILS'] = {
 
 # Ensure necessary directories exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-os.makedirs(os.path.join(os.path.dirname(__file__), 'static', exist_ok=True)
+os.makedirs(os.path.join(os.path.dirname(__file__), 'static'), exist_ok=True)
 os.makedirs(os.path.join(os.path.dirname(__file__), 'model'), exist_ok=True)
 
 # Sample images
