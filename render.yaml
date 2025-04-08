@@ -2,12 +2,20 @@ services:
   - type: web
     name: ghibli-style-transfer
     env: python
-    buildCommand: |
-      pip install -r requirements.txt
-      mkdir -p static/uploads
-      mkdir -p model
-    startCommand: gunicorn --worker-tmp-dir /dev/shm --workers=1 --threads=4 --timeout 120 main:app
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --config gunicorn_config.py main:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.12
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: ONNXRUNTIME_EXECUTION_PROVIDERS
+        value: "CPUExecutionProvider"
+      - key: MAX_CONTENT_LENGTH
+        value: "16777216"  # 16MB in bytes
     plan: free
+    healthCheckPath: /health
+    # Resources section for free plan limitations
+    resources:
+      cpu: 0.5  # 0.5 CPU
+      memory: 512  # 512MB RAM
