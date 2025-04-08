@@ -4,11 +4,9 @@ import base64
 import cv2
 import numpy as np
 import tempfile
-import subprocess
-import sys
 from datetime import datetime
 from PIL import Image, ImageEnhance
-from flask import Flask, request, jsonify, render_template, redirect, url_for
+from flask import Flask, request, jsonify, render_template
 from werkzeug.utils import secure_filename
 from flask_cors import CORS
 import onnxruntime
@@ -17,73 +15,60 @@ import onnxruntime
 app = Flask(__name__, template_folder='templates')
 CORS(app)
 
-# Configuration
-app.config.update({
-    'ALLOWED_EXTENSIONS': {'png', 'jpg', 'jpeg', 'webp'},
-    'MAX_CONTENT_LENGTH': 16 * 1024 * 1024,
-    'MODEL_PATH': os.path.join('models', 'ghibli_style.onnx'),
-    'UPLOAD_FOLDER': os.path.join('static', 'uploads'),
-    'OUTPUT_FOLDER': os.path.join('static', 'outputs'),
-    # Bank account details
-    'BANK_DETAILS': {
-        'account_name': 'Your Name',
-        'account_number': '1234567890',
-        'bank_name': 'Your Bank Name',
-        'ifsc_code': 'ABCD0123456',
-        'upi_id': 'yourname@upi',
-        'qr_code_path': os.path.join('static', 'qr_code.png')
-    }
-})
+# Config
+app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'webp'}
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
+app.config['MODEL_PATH'] = os.path.join('model', 'AnimeGANv2_Hayao.onnx')
+app.config['UPLOAD_FOLDER'] = os.path.join('static', 'uploads')
+app.config['STATIC_FOLDER'] = 'static'
 
-# Create directories if they don't exist
+# Bank account details
+app.config['BANK_DETAILS'] = {
+    'account_name': 'Your Name',
+    'account_number': '1234567890',
+    'bank_name': 'Your Bank Name',
+    'ifsc_code': 'ABCD0123456',
+    'upi_id': 'yourname@upi',
+    'qr_code_path': os.path.join('static', 'qr_code.png')
+}
+
+# Ensure necessary directories exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
+os.makedirs(os.path.join(os.path.dirname(__file__), 'static', exist_ok=True)
+os.makedirs(os.path.join(os.path.dirname(__file__), 'model'), exist_ok=True)
 
-# Image paths (relative to main.py)
-IMAGE_FOLDER = os.path.join(os.path.dirname(__file__), 'image')
-permanent_image = "profile2.jpg"
-additional_image = "profile1.jpg"
+# Sample images
+DEFAULT_IMAGES = {
+    'permanent': "sample1.jpg",
+    'additional': "sample2.jpg"
+}
 
 # Load ONNX model
-def load_model():
-    try:
-        providers = ['CPUExecutionProvider']
-        if 'CUDAExecutionProvider' in onnxruntime.get_available_providers():
-            providers.insert(0, 'CUDAExecutionProvider')
-        
-        session = onnxruntime.InferenceSession(
-            app.config['MODEL_PATH'],
-            providers=providers
+ort_session = None
+try:
+    model_path = app.config['MODEL_PATH']
+    if os.path.exists(model_path):
+        ort_session = onnxruntime.InferenceSession(
+            model_path,
+            providers=['CPUExecutionProvider']
         )
-        print("Ghibli style model loaded successfully")
-        return session
-    except Exception as e:
-        print(f"Error loading model: {str(e)}")
-        return None
-
-ort_session = load_model()
+        print(f"Model loaded successfully from {model_path}")
+    else:
+        print(f"Model file not found at {model_path}")
+except Exception as e:
+    print(f"Failed to load model: {e}")
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
 def preprocess_image(image_path):
     try:
-        img = Image.open(image_path).convert("RGB")
-        # Maintain aspect ratio while resizing
-        width, height = img.size
-        if width > height:
-            new_width = 512
-            new_height = int(height * (512 / width))
-        else:
-            new_height = 512
-            new_width = int(width * (512 / height))
-        
-        img = img.resize((new_width, new_height), Image.LANCZOS)
+        img = Image.open(image_path).convert("RGB").resize((512, 512))
         img = np.array(img).astype(np.float32) / 255.0
         img = np.expand_dims(img, axis=0)
         return img
     except Exception as e:
-        print(f"Preprocessing error: {str(e)}")
+        print(f"Error in preprocessing: {e}")
         raise
 
 def postprocess_image(output):
@@ -92,113 +77,137 @@ def postprocess_image(output):
         if output.shape[0] == 3:
             output = np.transpose(output, (1, 2, 0))
         output = (output * 255).clip(0, 255).astype(np.uint8)
-        
-        # Apply Ghibli-style enhancements
-        img = Image.fromarray(output)
-        
-        # Enhance colors and contrast
-        enhancer = ImageEnhance.Color(img)
-        img = enhancer.enhance(1.2)
-        
-        enhancer = ImageEnhance.Contrast(img)
-        img = enhancer.enhance(1.1)
-        
-        enhancer = ImageEnhance.Sharpness(img)
-        img = enhancer.enhance(1.5)
-        
-        return np.array(img)
+        output_img = Image.fromarray(output)
+        output_img = ImageEnhance.Sharpness(output_img).enhance(2.0)
+        output_img = ImageEnhance.Contrast(output_img).enhance(1.5)
+        return np.array(output_img)
     except Exception as e:
-        print(f"Postprocessing error: {str(e)}")
+        print(f"Error in postprocessing: {e}")
         raise
 
-def apply_ghibli_style(input_path, output_path=None):
+def apply_ghibli_style(input_path):
     try:
         if ort_session is None:
-            raise RuntimeError("Model not loaded")
+            return apply_simple_filter_fallback(input_path)
         
         input_img = preprocess_image(input_path)
         input_name = ort_session.get_inputs()[0].name
         output_name = ort_session.get_outputs()[0].name
-        
-        # Run inference
         output = ort_session.run([output_name], {input_name: input_img})[0]
-        
-        # Post-process
-        result_img = postprocess_image(output)
-        
-        # Save or return the result
-        if output_path:
-            cv2.imwrite(output_path, cv2.cvtColor(result_img, cv2.COLOR_RGB2BGR))
-            return output_path
-        else:
-            _, buffer = cv2.imencode('.jpg', cv2.cvtColor(result_img, cv2.COLOR_RGB2BGR))
-            return base64.b64encode(buffer).decode('utf-8')
-    except Exception as e:
-        print(f"Style transfer error: {str(e)}")
-        return None
 
-def process_with_style_api(image_path, style):
-    """Process image using the appropriate style model"""
-    try:
-        style_map = {
-            'ghibli1': 'main.py',
-            'ghibli2': 'main1.py',
-            'ghibli3': 'main2.py',
-            'ghibli4': 'main3.py',
-            'ghibli5': 'main4.py'
-        }
-        
-        script_name = style_map.get(style, 'main.py')
-        output_dir = tempfile.gettempdir()
-        output_path = os.path.join(output_dir, f"output_{uuid.uuid4().hex}.jpg")
-        
-        python_exec = sys.executable or 'python'
-        command = f"{python_exec} {script_name} --input {image_path} --output {output_path}"
-        
-        process = subprocess.Popen(
-            command,
-            shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=os.environ.copy()
-        )
-        stdout, stderr = process.communicate()
-        
-        if process.returncode != 0:
-            raise RuntimeError(f"Script failed: {stderr.decode('utf-8', errors='replace')}")
-        
-        if not os.path.exists(output_path):
-            raise RuntimeError("Output file not created by script")
-            
-        with open(output_path, 'rb') as f:
-            result_b64 = base64.b64encode(f.read()).decode('utf-8')
-        
-        try:
-            os.remove(output_path)
-        except Exception as e:
-            print(f"Error removing output file: {e}")
-        
-        return result_b64
-        
+        result_img = postprocess_image(output)
+        _, buffer = cv2.imencode('.jpg', cv2.cvtColor(result_img, cv2.COLOR_RGB2BGR))
+        return base64.b64encode(buffer).decode('utf-8')
     except Exception as e:
         print(f"Error in style transfer: {e}")
-        return None
+        return apply_simple_filter_fallback(input_path)
 
-def image_to_base64(image_path):
+def apply_simple_filter_fallback(input_path):
+    """Fallback processing when ONNX model fails"""
     try:
-        with open(image_path, 'rb') as f:
-            return base64.b64encode(f.read()).decode('utf-8')
+        img = cv2.imread(input_path)
+        if img is None:
+            raise RuntimeError(f"Could not read image from {input_path}")
+        
+        # Convert to sketch-like effect
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        gray = cv2.medianBlur(gray, 5)
+        edges = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, 
+                                     cv2.THRESH_BINARY, 9, 9)
+        color = cv2.bilateralFilter(img, 9, 300, 300)
+        cartoon = cv2.bitwise_and(color, color, mask=edges)
+        
+        _, buffer = cv2.imencode('.jpg', cartoon)
+        return base64.b64encode(buffer).decode('utf-8')
     except Exception as e:
-        print(f"Error reading image: {e}")
-        return None
+        print(f"Fallback processing failed: {e}")
+        try:
+            with open(input_path, 'rb') as f:
+                return base64.b64encode(f.read()).decode('utf-8')
+        except:
+            return None
+
+def process_with_style_api(image_path, style):
+    """Process image using the appropriate style"""
+    try:
+        if style == 'ghibli1':
+            return apply_ghibli_style(image_path)
+        else:
+            return apply_style_variation(image_path, style)
+    except Exception as e:
+        print(f"Error in style transfer: {e}")
+        try:
+            with open(image_path, 'rb') as f:
+                return base64.b64encode(f.read()).decode('utf-8')
+        except:
+            return None
+
+def apply_style_variation(image_path, style):
+    """Apply different style variations"""
+    img = cv2.imread(image_path)
+    if img is None:
+        raise RuntimeError(f"Could not read image from {image_path}")
+    
+    if style == 'ghibli2':
+        # Higher contrast
+        processed = apply_simple_filter(img, contrast=2.0, blur_amount=15)
+    elif style == 'ghibli3':
+        # More colorful
+        processed = apply_simple_filter(img, contrast=1.8, blur_amount=5, saturation=1.5)
+    elif style == 'ghibli4':
+        # More detailed
+        processed = apply_simple_filter(img, contrast=1.3, blur_amount=20)
+    elif style == 'ghibli5':
+        # Dreamy
+        processed = apply_simple_filter(img, contrast=1.6, blur_amount=8, brightness=1.2)
+    else:
+        # Default
+        processed = apply_simple_filter(img, contrast=1.5, blur_amount=10)
+    
+    _, buffer = cv2.imencode('.jpg', processed)
+    return base64.b64encode(buffer).decode('utf-8')
+
+def apply_simple_filter(img, contrast=1.5, blur_amount=10, saturation=1.0, brightness=1.0):
+    """Apply a simple artistic filter to an image"""
+    try:
+        # Convert to PIL Image for easier enhancement
+        img_pil = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+        
+        # Apply enhancements
+        if brightness != 1.0:
+            img_pil = ImageEnhance.Brightness(img_pil).enhance(brightness)
+        if contrast != 1.0:
+            img_pil = ImageEnhance.Contrast(img_pil).enhance(contrast)
+        if saturation != 1.0:
+            img_pil = ImageEnhance.Color(img_pil).enhance(saturation)
+        
+        # Convert back to OpenCV format
+        img = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+        
+        # Apply blur if specified
+        if blur_amount > 0:
+            blurred = cv2.GaussianBlur(img, (blur_amount, blur_amount), 0)
+            img = cv2.addWeighted(img, 1.5, blurred, -0.5, 0)
+            
+        return img
+    except Exception as e:
+        print(f"Error in simple filter: {e}")
+        return img
+
+def get_sample_image_path(filename):
+    """Get path to sample image or default if not found"""
+    sample_path = os.path.join(app.config['STATIC_FOLDER'], filename)
+    if os.path.exists(sample_path):
+        return sample_path
+    return None
 
 @app.route('/')
 def index():
-    permanent_path = os.path.join(IMAGE_FOLDER, permanent_image)
-    additional_path = os.path.join(IMAGE_FOLDER, additional_image)
+    permanent_path = get_sample_image_path(DEFAULT_IMAGES['permanent'])
+    additional_path = get_sample_image_path(DEFAULT_IMAGES['additional'])
 
-    permanent_b64 = image_to_base64(permanent_path)
-    additional_b64 = image_to_base64(additional_path)
+    permanent_b64 = image_to_base64(permanent_path) if permanent_path else None
+    additional_b64 = image_to_base64(additional_path) if additional_path else None
 
     return render_template(
         'index.html',
@@ -213,19 +222,18 @@ def payment():
     plan = request.args.get('plan', 'creator')
     period = request.args.get('period', 'monthly')
     amount = calculate_amount(plan, period)
-    currency = 'INR'
     
     qr_code_b64 = None
-    if os.path.exists(app.config['BANK_DETAILS']['qr_code_path']):
-        with open(app.config['BANK_DETAILS']['qr_code_path'], 'rb') as f:
-            qr_code_b64 = base64.b64encode(f.read()).decode('utf-8')
+    qr_path = app.config['BANK_DETAILS']['qr_code_path']
+    if os.path.exists(qr_path):
+        qr_code_b64 = image_to_base64(qr_path)
     
     return render_template(
         'payment.html',
         plan=plan,
         period=period,
         amount=amount,
-        currency=currency,
+        currency='INR',
         bank_details=app.config['BANK_DETAILS'],
         qr_code_url=f"data:image/png;base64,{qr_code_b64}" if qr_code_b64 else None
     )
@@ -234,21 +242,13 @@ def payment():
 def verify_payment():
     try:
         data = request.json
-        payment_method = data.get('payment_method')
-        transaction_id = data.get('transaction_id', f"TXN{uuid.uuid4().hex[:8].upper()}")
-        amount = data.get('amount')
-        plan = data.get('plan')
-        period = data.get('period')
-        
-        formatted_amount = "{:.2f}".format(amount / 100)
-        
         return jsonify({
             'success': True,
-            'transaction_id': transaction_id,
-            'payment_method': payment_method.capitalize(),
-            'amount': formatted_amount,
-            'plan': plan,
-            'period': period,
+            'transaction_id': data.get('transaction_id', f"TXN{uuid.uuid4().hex[:8].upper()}"),
+            'payment_method': data.get('payment_method', 'Bank Transfer').capitalize(),
+            'amount': "{:.2f}".format(float(data.get('amount', 0)) / 100),
+            'plan': data.get('plan', 'creator'),
+            'period': data.get('period', 'monthly'),
             'message': 'Payment verified successfully'
         })
     except Exception as e:
@@ -256,22 +256,15 @@ def verify_payment():
 
 @app.route('/payment-success')
 def payment_success():
-    plan = request.args.get('plan', 'creator')
-    period = request.args.get('period', 'monthly')
-    transaction_id = request.args.get('transaction_id', f"TXN{uuid.uuid4().hex[:8].upper()}")
-    payment_method = request.args.get('payment_method', 'Bank Transfer')
-    
-    amount = calculate_amount(plan, period)
-    current_datetime = datetime.now().strftime("%B %d, %Y, %I:%M %p")
-    
     return render_template(
         'payment_success.html',
-        plan=plan,
-        period=period,
-        amount=amount,
-        transaction_id=transaction_id,
-        datetime=current_datetime,
-        payment_method=payment_method
+        plan=request.args.get('plan', 'creator'),
+        period=request.args.get('period', 'monthly'),
+        amount=calculate_amount(request.args.get('plan', 'creator'), 
+                               request.args.get('period', 'monthly')),
+        transaction_id=request.args.get('transaction_id', f"TXN{uuid.uuid4().hex[:8].upper()}"),
+        datetime=datetime.now().strftime("%B %d, %Y, %I:%M %p"),
+        payment_method=request.args.get('payment_method', 'Bank Transfer')
     )
 
 @app.route('/upload', methods=['POST'])
@@ -287,24 +280,20 @@ def upload_file():
         return jsonify({'status': 'error', 'message': 'File type not allowed'}), 400
 
     try:
-        temp_dir = tempfile.gettempdir()
-        temp_path = os.path.join(temp_dir, secure_filename(file.filename))
-        file.save(temp_path)
+        # Save to upload folder instead of temp directory
+        filename = secure_filename(file.filename)
+        upload_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(upload_path)
 
         selected_style = request.form.get('style', 'ghibli1')
+        result_b64 = process_with_style_api(upload_path, selected_style)
+        original_b64 = image_to_base64(upload_path)
         
-        if selected_style == 'ghibli1':
-            result_b64 = apply_ghibli_style(temp_path)
-        else:
-            result_b64 = process_with_style_api(temp_path, selected_style)
-        
-        with open(temp_path, 'rb') as f:
-            original_b64 = base64.b64encode(f.read()).decode('utf-8')
-        
+        # Clean up
         try:
-            os.remove(temp_path)
+            os.remove(upload_path)
         except Exception as e:
-            print(f"Error removing temp file: {e}")
+            print(f"Error removing uploaded file: {e}")
 
         if not result_b64:
             return jsonify({'status': 'error', 'message': 'Failed to process image'}), 500
@@ -319,80 +308,15 @@ def upload_file():
         print(f"Upload error: {str(e)}")
         return jsonify({'status': 'error', 'message': f'Error: {str(e)}'}), 500
 
-@app.route('/upload-ghibli1', methods=['POST'])
-def upload_file_ghibli1():
-    return process_with_style('main.py')
-
-@app.route('/upload-ghibli2', methods=['POST'])
-def upload_file_ghibli2():
-    return process_with_style('main1.py')
-
-@app.route('/upload-ghibli3', methods=['POST'])
-def upload_file_ghibli3():
-    return process_with_style('main2.py')
-
-@app.route('/upload-ghibli4', methods=['POST'])
-def upload_file_ghibli4():
-    return process_with_style('main3.py')
-
-@app.route('/upload-ghibli5', methods=['POST'])
-def upload_file_ghibli5():
-    return process_with_style('main4.py')
-
-def process_with_style(script_name):
-    if 'file' not in request.files:
-        return jsonify({'status': 'error', 'message': 'No file part'}), 400
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'status': 'error', 'message': 'No selected file'}), 400
-    if not allowed_file(file.filename):
-        return jsonify({'status': 'error', 'message': 'File type not allowed'}), 400
+def image_to_base64(image_path):
+    if not image_path or not os.path.exists(image_path):
+        return None
     try:
-        temp_dir = tempfile.gettempdir()
-        temp_path = os.path.join(temp_dir, secure_filename(file.filename))
-        file.save(temp_path)
-        
-        output_path = os.path.join(temp_dir, "output.jpg")
-        env = os.environ.copy()
-        env['PYTHONIOENCODING'] = 'utf-8'
-        
-        command = f"python {script_name} --input {temp_path}"
-        
-        process = subprocess.Popen(
-            command,
-            shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=env
-        )
-        stdout, stderr = process.communicate()
-        
-        if process.returncode != 0:
-            raise RuntimeError(f"Script failed: {stderr.decode('utf-8', errors='replace')}")
-        
-        if not os.path.exists(output_path):
-            raise RuntimeError("Output file not created by script")
-            
-        with open(output_path, 'rb') as f:
-            result_b64 = base64.b64encode(f.read()).decode('utf-8')
-        
-        with open(temp_path, 'rb') as f:
-            original_b64 = base64.b64encode(f.read()).decode('utf-8')
-        
-        try:
-            os.remove(temp_path)
-            os.remove(output_path)
-        except Exception as e:
-            print(f"Error removing temp files: {e}")
-            
-        return jsonify({
-            'status': 'success',
-            'original': f"data:image/jpeg;base64,{original_b64}",
-            'result': f"data:image/jpeg;base64,{result_b64}"
-        })
+        with open(image_path, 'rb') as f:
+            return base64.b64encode(f.read()).decode('utf-8')
     except Exception as e:
-        print(f"Upload error: {str(e)}")
-        return jsonify({'status': 'error', 'message': f'Error: {str(e)}'}), 500
+        print(f"Error reading image: {e}")
+        return None
 
 def calculate_amount(plan, period):
     if plan == 'starter':
@@ -403,7 +327,14 @@ def calculate_amount(plan, period):
         return 4900 if period == 'monthly' else 47000
     return 0
 
+@app.errorhandler(404)
+def page_not_found(e):
+    return render_template('404.html'), 404
+
+@app.errorhandler(500)
+def server_error(e):
+    return render_template('500.html'), 500
+
 if __name__ == '__main__':
-    os.environ['PYTHONIOENCODING'] = 'utf-8'
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
