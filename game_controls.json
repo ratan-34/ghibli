@@ -1,0 +1,22 @@
+{
+    "movement": {
+        "forward": "w",
+        "backward": "s",
+        "left": "a",
+        "right": "d",
+        "jump": "space",
+        "crouch": "ctrl",
+        "sprint": "shift"
+    },
+    "combat": {
+        "attack": "mouse1",
+        "aim": "mouse2",
+        "reload": "r",
+        "switch_weapon": "q"
+    },
+    "interaction": {
+        "use": "e",
+        "inventory": "i",
+        "map": "m"
+    }
+}

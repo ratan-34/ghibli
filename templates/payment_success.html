@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AnimeAI Pro | Payment Successful</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #8a2be2;
+            --primary-light: #9d4edd;
+            --primary-dark: #5a189a;
+            --secondary: #00f5d4;
+            --secondary-dark: #00bb94;
+            --accent: #ff006e;
+            --accent-light: #ff5c8d;
+            --dark: #10002b;
+            --darker: #0a001a;
+            --darkest: #050011;
+            --light: #f8f9fa;
+            --light-gray: #e9ecef;
+            --medium-gray: #adb5bd;
+            --dark-gray: #495057;
+            
+            --gradient: linear-gradient(135deg, var(--primary), var(--primary-light));
+            --gradient-hover: linear-gradient(135deg, var(--primary-light), var(--primary));
+            --gradient-secondary: linear-gradient(135deg, var(--secondary), var(--secondary-dark));
+            --gradient-accent: linear-gradient(135deg, var(--accent), var(--accent-light));
+            
+            --neon-glow: 0 0 10px rgba(138, 43, 226, 0.7), 0 0 20px rgba(138, 43, 226, 0.5);
+            --neon-glow-secondary: 0 0 10px rgba(0, 245, 212, 0.7), 0 0 20px rgba(0, 245, 212, 0.5);
+            --text-glow: 0 0 5px rgba(255, 255, 255, 0.8);
+            
+            --border-radius: 12px;
+            --border-radius-lg: 20px;
+            --border-radius-xl: 30px;
+            
+            --box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            --box-shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.25);
+            --box-shadow-inset: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+            
+            --transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            --transition-fast: all 0.15s ease;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--darker);
+            color: var(--light);
+            font-family: 'Poppins', sans-serif;
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .success-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(138, 43, 226, 0.3);
+            border-radius: var(--border-radius-lg);
+            width: 100%;
+            max-width: 600px;
+            padding: 50px;
+            text-align: center;
+            box-shadow: var(--box-shadow-lg);
+            animation: fadeInUp 0.8s ease-out;
+        }
+
+        .success-icon {
+            width: 120px;
+            height: 120px;
+            background: var(--gradient-secondary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 30px;
+            font-size: 3.5rem;
+            color: white;
+            box-shadow: var(--neon-glow-secondary);
+            animation: pulse 2s infinite;
+        }
+
+        .success-title {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            color: var(--secondary);
+            font-family: 'Orbitron', sans-serif;
+            text-shadow: var(--text-glow);
+        }
+
+        .success-subtitle {
+            font-size: 1.2rem;
+            margin-bottom: 30px;
+            color: var(--light);
+        }
+
+        .transaction-details {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: var(--border-radius);
+            padding: 20px;
+            margin-bottom: 30px;
+            text-align: left;
+        }
+
+        .transaction-details h3 {
+            color: var(--primary-light);
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+        }
+
+        .transaction-details h3 i {
+            margin-right: 10px;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .detail-label {
+            color: var(--medium-gray);
+        }
+
+        .detail-value {
+            color: var(--light);
+            font-weight: 500;
+        }
+
+        .button-container {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 30px;
+        }
+
+        .btn {
+            padding: 15px 30px;
+            background: var(--gradient);
+            color: white;
+            border-radius: var(--border-radius-xl);
+            text-decoration: none;
+            font-weight: 600;
+            transition: var(--transition);
+            box-shadow: var(--neon-glow);
+            border: none;
+            cursor: pointer;
+            font-family: 'Orbitron', sans-serif;
+            letter-spacing: 1px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(138, 43, 226, 0.3);
+        }
+
+        .btn i {
+            margin-right: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 0 15px rgba(138, 43, 226, 0.9);
+        }
+
+        .confetti {
+            position: fixed;
+            width: 10px;
+            height: 10px;
+            background-color: var(--secondary);
+            border-radius: 50%;
+            z-index: -1;
+            animation: confetti-fall 4s linear infinite;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                box-shadow: var(--neon-glow-secondary);
+            }
+            50% {
+                transform: scale(1.05);
+                box-shadow: 0 0 20px rgba(0, 245, 212, 0.9), 0 0 30px rgba(0, 245, 212, 0.7);
+            }
+            100% {
+                transform: scale(1);
+                box-shadow: var(--neon-glow-secondary);
+            }
+        }
+
+        @keyframes confetti-fall {
+            0% {
+                transform: translateY(-100vh) rotate(0deg);
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(100vh) rotate(360deg);
+                opacity: 0;
+            }
+        }
+
+        /* Responsive styles */
+        @media (max-width: 768px) {
+            .success-card {
+                padding: 30px 20px;
+            }
+            
+            .button-container {
+                flex-direction: column;
+            }
+            
+            .success-icon {
+                width: 100px;
+                height: 100px;
+                font-size: 3rem;
+            }
+            
+            .success-title {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="success-card">
+            <div class="success-icon">
+                <i class="fas fa-check"></i>
+            </div>
+            
+            <h1 class="success-title">Payment Successful!</h1>
+            <p class="success-subtitle">Thank you for subscribing to AnimeAI Pro. Your account has been upgraded successfully.</p>
+            
+            <div class="transaction-details">
+                <h3><i class="fas fa-file-invoice"></i> Transaction Details</h3>
+                
+                <div class="detail-row">
+                    <div class="detail-label">Transaction ID</div>
+                    <div class="detail-value" id="transaction-id">{{ transaction_id }}</div>
+                </div>
+                
+                <div class="detail-row">
+                    <div class="detail-label">Date & Time</div>
+                    <div class="detail-value" id="transaction-date">{{ datetime }}</div>
+                </div>
+                
+                <div class="detail-row">
+                    <div class="detail-label">Amount</div>
+                    <div class="detail-value" id="transaction-amount">₹{{ "%.2f"|format(amount/100) }}</div>
+                </div>
+                
+                <div class="detail-row">
+                    <div class="detail-label">Payment Method</div>
+                    <div class="detail-value" id="payment-method">{{ payment_method }}</div>
+                </div>
+                
+                <div class="detail-row">
+                    <div class="detail-label">Plan</div>
+                    <div class="detail-value" id="plan">{{ plan|capitalize }} ({{ period|capitalize }})</div>
+                </div>
+            </div>
+            
+            <p>A receipt has been sent to your email address. You now have full access to all features included in your plan.</p>
+            
+            <div class="button-container">
+                <a href="/" class="btn">
+                    <i class="fas fa-magic"></i> Start Creating
+                </a>
+                <button class="btn btn-secondary" id="download-receipt">
+                    <i class="fas fa-download"></i> Download Receipt
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Generate confetti animation
+        function createConfetti() {
+            const colors = ['#8a2be2', '#9d4edd', '#00f5d4', '#ff006e', '#ffffff'];
+            const confettiCount = 100;
+            
+            for (let i = 0; i < confettiCount; i++) {
+                const confetti = document.createElement('div');
+                confetti.classList.add('confetti');
+                
+                // Random position, color, size and delay
+                const size = Math.floor(Math.random() * 12) + 6;
+                const left = Math.floor(Math.random() * 100);
+                const delay = Math.random() * 4;
+                const color = colors[Math.floor(Math.random() * colors.length)];
+                
+                confetti.style.width = `${size}px`;
+                confetti.style.height = `${size}px`;
+                confetti.style.left = `${left}%`;
+                confetti.style.backgroundColor = color;
+                confetti.style.animationDelay = `${delay}s`;
+                
+                // Add confetti to body
+                document.body.appendChild(confetti);
+                
+                // Remove after animation completes
+                setTimeout(() => {
+                    confetti.remove();
+                }, 4000 + (delay * 1000));
+            }
+        }
+        
+        // Generate receipt PDF
+        function generateReceipt() {
+            // In a real implementation, this would generate a PDF receipt
+            // For this example, we'll just create a simple HTML receipt
+            const receiptContent = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Payment Receipt - AnimeAI Pro</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 40px; }
+                        .receipt { max-width: 600px; margin: 0 auto; }
+                        .header { text-align: center; margin-bottom: 30px; }
+                        .details { margin-bottom: 20px; }
+                        .detail-row { display: flex; margin-bottom: 8px; }
+                        .detail-label { font-weight: bold; width: 150px; }
+                        .footer { margin-top: 40px; text-align: center; font-size: 12px; }
+                    </style>
+                </head>
+                <body>
+                    <div class="receipt">
+                        <div class="header">
+                            <h2>AnimeAI Pro</h2>
+                            <h3>Payment Receipt</h3>
+                        </div>
+                        <div class="details">
+                            <div class="detail-row">
+                                <div class="detail-label">Transaction ID:</div>
+                                <div>${document.getElementById('transaction-id').textContent}</div>
+                            </div>
+                            <div class="detail-row">
+                                <div class="detail-label">Date & Time:</div>
+                                <div>${document.getElementById('transaction-date').textContent}</div>
+                            </div>
+                            <div class="detail-row">
+                                <div class="detail-label">Amount Paid:</div>
+                                <div>${document.getElementById('transaction-amount').textContent}</div>
+                            </div>
+                            <div class="detail-row">
+                                <div class="detail-label">Payment Method:</div>
+                                <div>${document.getElementById('payment-method').textContent}</div>
+                            </div>
+                            <div class="detail-row">
+                                <div class="detail-label">Plan:</div>
+                                <div>${document.getElementById('plan').textContent}</div>
+                            </div>
+                        </div>
+                        <div class="footer">
+                            <p>Thank you for your payment. This is your official receipt.</p>
+                            <p>AnimeAI Pro - Transforming your photos into anime art</p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+            `;
+            
+            // Open the receipt in a new window for printing
+            const receiptWindow = window.open('', '_blank');
+            receiptWindow.document.write(receiptContent);
+            receiptWindow.document.close();
+            receiptWindow.focus();
+            receiptWindow.print();
+        }
+        
+        // Set current date and time
+        function setCurrentDateTime() {
+            const now = new Date();
+            const options = { 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            };
+            return now.toLocaleDateString('en-US', options);
+        }
+        
+        // Update transaction details if not provided by server
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set current date/time if not provided
+            const transactionDateEl = document.getElementById('transaction-date');
+            if (transactionDateEl.textContent.includes('datetime')) {
+                transactionDateEl.textContent = setCurrentDateTime();
+            }
+            
+            // Create confetti animation
+            createConfetti();
+            
+            // Handle receipt download button
+            document.getElementById('download-receipt').addEventListener('click', function(e) {
+                e.preventDefault();
+                generateReceipt();
+            });
+        });
+    </script>
+</body>
+</html>
